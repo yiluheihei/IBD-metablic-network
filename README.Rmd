@@ -134,7 +134,7 @@ mean(inter_cor)
 subnodes <- intersect(refnode, row.names(kos_norm))
 
 # construct integrated metabolic network
-biom.data <- make_biom(kos_norm, observation_metadata = row.names(kos_norm))
+biom.data <- mmnet:::make_biom(kos_norm, observation_metadata = row.names(kos_norm))
 biom.data$type <- "enzymatic genes abundance"
 ssns <- constructSSN(biom.data)
 diff_ssn <- diff_net(ssns, sample.state = state)
@@ -190,6 +190,9 @@ wilcox.test(diff_bc, other_bc, alternative = "less")
 
 ```{r p-centrality}
 topo_tibble <- generate_topos_tibble(diff_ssn)
+topo_other <- dplyr::filter(topo_tibble, state %in% c("Enrich", "Deplete")) %>% 
+  mutate(state = "Associate")
+topo_tibble <- dplyr::bind_rows(topo_tibble, topo_other)
 
 se <- function(x) sd(x)/sqrt(length(x))
 summary_topo_tibble <- group_by(topo_tibble, method, state) %>% 
@@ -199,16 +202,20 @@ summary_topo_tibble <- group_by(topo_tibble, method, state) %>%
     se = se(value)
   )
 
-p_centrality <- ggplot(dplyr::filter(summary_topo_tibble, method == "Betweenness centrality"), 
-  aes(state, m_value, fill = state)) +
+topo_tibble_bc <- dplyr::filter(topo_tibble, method == "Betweenness centrality")
+summary_topo_tibble_bc <- dplyr::filter(summary_topo_tibble, method == "Betweenness centrality")
+
+p_centrality <- ggplot(summary_topo_tibble_bc, aes(state, m_value, fill = state)) +
   geom_col(width = 0.6) +
   geom_errorbar(aes(ymin = m_value - se, ymax = m_value + se), width = 0.2) +
   labs(x=NULL, y = "Beteenness Centrality") + 
   ggsci::scale_fill_npg() +
   theme_bw() +
   theme(legend.position = "none")
-p_centrality
-#ggsave(p_centrality, "output/p_centrality.pdf", width = 4, height = 3)
+p_color <- ggplot_build(p_centrality)$data[[1]]$fill
+p_centrality <- p_centrality + 
+  scale_fill_manual(values = c("#3C5488FF", "#00A087FF", "#E64B35FF", "grey")) 
+# ggsave(p_centrality, filename = "output/p_centrality.pdf", width = 4, height = 3)
 
 ```
 
@@ -227,7 +234,8 @@ wilcox.test(diff_dg, other_dg, alternative = "less")
 ```
 
 ```{r p-other-topo}
-p_other_topo <- ggplot(summary_topo_tibble, aes(state, m_value, fill = state)) + 
+summary_other_topo <- dplyr::filter(summary_topo_tibble, method != "Betweenness centrality")
+p_other_topo <- ggplot(summary_other_topo, aes(state, m_value, fill = state)) + 
   geom_col(width = 0.6) +
   geom_errorbar(aes(ymin = m_value - se, ymax = m_value + se), width = 0.2) +
   facet_wrap(~method, scales = "free_y") +
@@ -235,8 +243,9 @@ p_other_topo <- ggplot(summary_topo_tibble, aes(state, m_value, fill = state)) +
   ggsci::scale_fill_npg() +
   theme_bw() +
   theme(legend.position = "none")
-p_other_topo
-# ggsave(p_other_topo, "output/p_other_topo.pdf", width = 7, height = 5)
+p_other_topo <- p_other_topo +
+  scale_fill_manual(values = c("#3C5488FF", "#00A087FF", "#E64B35FF", "grey"))
+# ggsave(p_other_topo, filename = "output/p_other_topo.pdf", width = 8, height = 6)
 ```
 
 ## IBD和healthy网络比较
@@ -314,9 +323,8 @@ p_nc <- ggplot(nc_tibble, aes(x, y, color = state)) +
   theme(legend.position = c(0.07, 0.9), legend.title = element_blank()) +
   labs(x = "Percentage of removed nodes", y = "Natural connectivity") +
   facet_wrap(~method, scales = "free_y")
-
+p_nc <- p_nc + scale_color_manual(values = c("#4DBBD5FF", "#E64B35FF"))
 p_nc
-
 # ggsave(p_nc, filename = "output/p_nc.pdf", width = 7, height = 4)
 ```
 
