@@ -4,3 +4,4 @@
 .Ruserdata
 README_cache/
 .DS_Store
+output/data/final_version.rda

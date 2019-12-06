@@ -7,7 +7,7 @@ output: github_document
 knitr::opts_chunk$set(echo = TRUE, cache = TRUE, cache.lazy = FALSE)
 ```
 
-```{r package}
+```{r packagei, message=FALSE}
 library(curatedMetagenomicData)
 library(tidyverse)
 
@@ -17,6 +17,10 @@ library(igraph)
 library(mmnet)
 library(furrr)
 library(patchwork)
+
+# 图片中文字体
+library(extrafont)
+loadfonts()
 ```
 
 ```{r source}
@@ -166,8 +170,15 @@ enrich_pathway@result <- dplyr::arrange(enrich_pathway@result, p.adjust)
 deplete_pathway@result <- dplyr::filter(deplete_pathway@result, p.adjust < 0.05)
 deplete_pathway@result <- dplyr::filter(deplete_pathway@result, Description != "Glycolysis / Gluconeogenesis")
 
-p_pathway_enrich <- enrichplot::dotplot(enrich_pathway, showCategory = 10) + 
-  enrichplot::dotplot(deplete_pathway, showCategory = 10) +
+# 中文
+# library(showtext)
+# showtext_auto()
+p_pathway_enrich <- (enrichplot::dotplot(enrich_pathway, showCategory = 10) + 
+    labs(x = "GeneRatio (IBD相关KO/通路中所有KO)", y = "KEGG通路") +
+    theme(axis.title = element_text(family = "SimHei"))) +
+  (enrichplot::dotplot(deplete_pathway, showCategory = 10) +
+    labs(x = "GeneRatio (IBD相关KO/通路中所有KO)", y = "KEGG通路") + 
+    theme(axis.title = element_text(family = "SimHei"))) +
   plot_layout(ncol = 1)
 p_pathway_enrich
 # ggsave(p_pathway_enrich, filename = "output/pathway_enrich.pdf", width = 8, height = 9)
@@ -208,14 +219,22 @@ summary_topo_tibble_bc <- dplyr::filter(summary_topo_tibble, method == "Betweenn
 p_centrality <- ggplot(summary_topo_tibble_bc, aes(state, m_value, fill = state)) +
   geom_col(width = 0.6) +
   geom_errorbar(aes(ymin = m_value - se, ymax = m_value + se), width = 0.2) +
-  labs(x=NULL, y = "Beteenness Centrality") + 
+  labs(x=NULL, y = "介数中心度") + 
   ggsci::scale_fill_npg() +
+  scale_x_discrete(
+    breaks = c("Associate", "Deplete", "Enrich", "Other"),
+    labels = c("相关", "低表达", "高表达", "其它")
+  ) +
   theme_bw() +
-  theme(legend.position = "none")
+  theme(legend.position = "none", 
+    axis.title = element_text(family = "SimHei"),
+    axis.text.x = element_text(family = "SimHei"))
 p_color <- ggplot_build(p_centrality)$data[[1]]$fill
 p_centrality <- p_centrality + 
   scale_fill_manual(values = c("#3C5488FF", "#00A087FF", "#E64B35FF", "grey")) 
-# ggsave(p_centrality, filename = "output/p_centrality.pdf", width = 4, height = 3)
+p_centrality
+# ggsave(p_centrality, filename = "output/figure/fig3.pdf", width = 4, height = 3)
+# embed_fonts("output/figure/fig3.pdf")
 
 ```
 
@@ -235,17 +254,31 @@ wilcox.test(diff_dg, other_dg, alternative = "less")
 
 ```{r p-other-topo}
 summary_other_topo <- dplyr::filter(summary_topo_tibble, method != "Betweenness centrality")
+summary_other_topo$method <- factor(
+  rep(c("聚类系数", "度", "入度", "出度"), each = 4),
+  levels = c("聚类系数", "度", "入度", "出度")
+)
 p_other_topo <- ggplot(summary_other_topo, aes(state, m_value, fill = state)) + 
   geom_col(width = 0.6) +
   geom_errorbar(aes(ymin = m_value - se, ymax = m_value + se), width = 0.2) +
   facet_wrap(~method, scales = "free_y") +
-  labs(x=NULL, y = "Centrality") + 
+  labs(x=NULL, y = NULL) + 
   ggsci::scale_fill_npg() +
+  scale_x_discrete(
+    breaks = c("Associate", "Deplete", "Enrich", "Other"),
+    labels = c("相关", "低表达", "高表达", "其它")
+  ) +
   theme_bw() +
-  theme(legend.position = "none")
+  theme(legend.position = "none", 
+    axis.title = element_text(family = "SimHei"),
+    axis.text.x = element_text(family = "SimHei"),
+    strip.text = element_text(family = "SimHei")
+  )
 p_other_topo <- p_other_topo +
   scale_fill_manual(values = c("#3C5488FF", "#00A087FF", "#E64B35FF", "grey"))
-# ggsave(p_other_topo, filename = "output/p_other_topo.pdf", width = 8, height = 6)
+p_other_topo
+# ggsave(p_other_topo, filename = "output/figure/fig4.pdf", width = 8, height = 6)
+#embed_fonts("output/figure/fig4.pdf")
 ```
 
 ## IBD和healthy网络比较
@@ -316,16 +349,94 @@ nc_tibble <- bind_rows(
   , make_nc_tibble(unlist(nc_health_random), "health", "random"),
    make_nc_tibble(unlist(nc_ibd_random), "IBD", "random")
 )
-p_nc <- ggplot(nc_tibble, aes(x, y, color = state)) +
+nc_tibble_mod <- nc_tibble %>%
+  mutate(method = recode_factor(method,
+    "betweenness" = "介数中心度",
+    "degree" = "度",
+    "random" = "随机"
+))
+p_nc <- ggplot(nc_tibble_mod, aes(x, y, color = state)) +
   geom_line() +
-  theme_bw() + 
-  ggsci::scale_color_npg() +
-  theme(legend.position = c(0.07, 0.9), legend.title = element_blank()) +
-  labs(x = "Percentage of removed nodes", y = "Natural connectivity") +
-  facet_wrap(~method, scales = "free_y")
-p_nc <- p_nc + scale_color_manual(values = c("#4DBBD5FF", "#E64B35FF"))
+  labs(x = "移除节点的比例", y = "自然连通度") +
+  facet_wrap(~method, scales = "free_y") +
+  # ggsci::scale_color_npg() +
+  scale_color_manual(values = c("#4DBBD5FF", "#E64B35FF")) +
+  theme_bw() +
+  theme(legend.position = c(0.1, 0.2), 
+    legend.title = element_blank(),
+    strip.text = element_text(family = "SimHei"),
+    axis.title = element_text(family = "SimHei")
+  )
 p_nc
-# ggsave(p_nc, filename = "output/p_nc.pdf", width = 7, height = 4)
+ggsave(p_nc, filename = "output/figure/fig5.pdf",
+  width = 7, height = 4)
+embed_fonts("output/figure/fig5.pdf")
+
+
+# facet添加tags
+# library(gtable)
+# tag_facet <- function (p, 
+#   open = c("(", ""), close = c(")", "."), 
+#   tag_fun_top = function(i) letters[i], 
+#   tag_fun_right = utils::as.roman, 
+#   x = c(0, 0), y = c(0.5, 1), 
+#   hjust = c(0, 0), vjust = c(0.5, 1), 
+#   fontface = c(2, 2), family = "", file, ...) 
+# {
+#   gb <- ggplot_build(p)
+#   lay <- gb$layout$layout
+#   tags_top <- paste0(open[1], tag_fun_top(unique(lay$COL)), 
+#     close[1])
+#   tags_right <- paste0(open[2], tag_fun_right(unique(lay$ROW)), 
+#     close[2])
+#   tl <- lapply(tags_top, grid::textGrob, x = x[1], y = y[1], 
+#     hjust = hjust[1], vjust = vjust[1], gp = grid::gpar(fontface = fontface[1], 
+#       fontfamily = family, ...))
+#   rl <- lapply(tags_right, grid::textGrob, x = x[2], y = y[2], 
+#     hjust = hjust[2], vjust = vjust[2], gp = grid::gpar(fontface = fontface[2], 
+#       fontfamily = family, ...))
+#   g <- ggplot_gtable(gb)
+#   g <- gtable::gtable_add_rows(g, grid::unit(1, "line"), pos = 0)
+#   l <- unique(g$layout[grepl("panel", g$layout$name), "l"])
+#   g <- gtable::gtable_add_grob(g, grobs = tl, t = 1, l = l)
+#   wm <- do.call(grid::unit.pmax, lapply(rl, grid::grobWidth))
+#   g <- gtable::gtable_add_cols(g, wm, pos = max(l))
+#   t <- unique(g$layout[grepl("panel", g$layout$name), "t"])
+#   g <- gtable::gtable_add_grob(g, grobs = rl, t = t, l = max(l) + 
+#       1)
+#   g <- gtable::gtable_add_cols(g, unit(2, "mm"), pos = max(l))
+#   # save plot
+#   if (file) {
+#     pdf(file = file, family="SimHei", width = 7, height = 4)
+#     grid::grid.newpage()
+#     grid::grid.draw(g)
+#     dev.off()
+#     embed_fonts(file)
+#   }
+#   invisible(g)
+# }
+# 
+# 
+# p_nc <- ggplot(nc_tibble_mod, aes(x, y, color = state)) +
+#   geom_line() +
+#   labs(x = "移除节点的比例", y = "自然连通度") +
+#   facet_wrap(~method, scales = "free_y") +
+#   # ggsci::scale_color_npg() +
+#   scale_color_manual(values = c("#4DBBD5FF", "#E64B35FF")) +
+#   theme_bw() +
+#   theme(legend.position = c(0.1, 0.15), 
+#     legend.title = element_blank(),
+#     strip.text = element_text(family = "SimHei"),
+#     axis.title = element_text(family = "SimHei")
+#   )
+# 
+# tag_facet(
+#   p_nc, open = NULL, close = NULL, 
+#   fontface = 1,
+#   tag_fun_top = function(i)toupper(letters[i]),
+#   tag_fun_right = function(x)return(""),
+#   file = "Project/IBD-metablic-network/fig5.pdf"
+# ) 
 ```
 
 ## 其他

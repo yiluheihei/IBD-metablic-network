@@ -11,6 +11,10 @@ library(igraph)
 library(mmnet)
 library(furrr)
 library(patchwork)
+
+# 图片中文字体
+library(extrafont)
+loadfonts()
 ```
 
 ``` r
@@ -18,10 +22,10 @@ source_files <- list.files("R", "R$", full.names = TRUE)
 for (file in source_files) source(file)
 ```
 
-数据预处理
-----------
+## 数据预处理
 
-数据源自Nielsen等人的文章[1]，用R包[curatedMetagenomicData](https://github.com/waldronlab/curatedMetagenomicData)获取功能注释数据。我们选择spanish样本进行分析，去除不一致样本，包括肥胖（BMI &gt;= 30)、同一个样本中第二次测序的数据、使用发酵乳产品 。
+数据源自Nielsen等人的文章\[1\]，用R包[curatedMetagenomicData](https://github.com/waldronlab/curatedMetagenomicData)获取功能注释数据。我们选择spanish样本进行分析，去除不一致样本，包括肥胖（BMI
+\>= 30)、同一个样本中第二次测序的数据、使用发酵乳产品 。
 
 ``` r
 # 从nielsen文章中下载样本元数据nielsen_sample.xls
@@ -78,7 +82,8 @@ gene_family_abundance <- exprs(selected_ds)
 sample_meta <- pData(selected_ds)
 ```
 
-[curatedMetagenomicData](https://github.com/waldronlab/curatedMetagenomicData)默认使用[humann2](https://bitbucket.org/biobakery/humann2/src/default/humann2/)参考Uniref90进行功能注释，我们使用humann2将其映射至KEGG orthology。
+[curatedMetagenomicData](https://github.com/waldronlab/curatedMetagenomicData)默认使用[humann2](https://bitbucket.org/biobakery/humann2/src/default/humann2/)参考Uniref90进行功能注释，我们使用humann2将其映射至KEGG
+orthology。
 
 ``` r
 humann2_regroup_in <- as.data.frame(
@@ -125,7 +130,8 @@ kos_norm <- sweep(kos_table, 2, sample_meta$number_reads * 100, "/")
 state <- sample_meta$disease
 ```
 
-KO相对丰度在127个样本之间是一致的（平均相关系数为0.83, Spearman相关检验），健康样本间的KO相对丰度的一致性（平均相关系数0.86，Spearman相关检验）高于IBD样本间的一致性（平均相关系数为0.81，Spearman相关检验）
+KO相对丰度在127个样本之间是一致的（平均相关系数为0.83,
+Spearman相关检验），健康样本间的KO相对丰度的一致性（平均相关系数0.86，Spearman相关检验）高于IBD样本间的一致性（平均相关系数为0.81，Spearman相关检验）
 
 ``` r
 # ko correaltion across samples
@@ -154,10 +160,11 @@ mean(inter_cor)
 
     ## [1] 0.8284058
 
-整合代谢网络
-------------
+## 整合代谢网络
 
-我们参考[mmnet](https://github.com/yiluheihei/mmnet)构建整合代谢网络。节点表示KO，如果a KO参与的代谢反应的产物可作为 b KO 参与代谢反应的底物，那么存在由a到b的连边。
+我们参考[mmnet](https://github.com/yiluheihei/mmnet)构建整合代谢网络。节点表示KO，如果a
+KO参与的代谢反应的产物可作为 b KO
+参与代谢反应的底物，那么存在由a到b的连边。
 
 ``` r
 # load("data/sysdata.rda") # reference metabolic network based on KEGG metabolic pathway from mmnet
@@ -166,16 +173,15 @@ mean(inter_cor)
 subnodes <- intersect(refnode, row.names(kos_norm))
 
 # construct integrated metabolic network
-biom.data <- make_biom(kos_norm, observation_metadata = row.names(kos_norm))
+biom.data <- mmnet:::make_biom(kos_norm, observation_metadata = row.names(kos_norm))
 biom.data$type <- "enzymatic genes abundance"
 ssns <- constructSSN(biom.data)
 diff_ssn <- diff_net(ssns, sample.state = state)
 ```
 
-根据比值比OR预测IBD相关KO
--------------------------
+## 根据比值比OR预测IBD相关KO
 
-OR&gt;2表示KO在IBD中显著富集，OR&lt;0.5表示KO在IBD中显著减少。共发现366个IBD相关KO，其中254个高表达，112个低表达
+OR\>2表示KO在IBD中显著富集，OR\<0.5表示KO在IBD中显著减少。共发现366个IBD相关KO，其中254个高表达，112个低表达
 
 ``` r
 or <- vertex_attr(diff_ssn, "OR")
@@ -199,8 +205,15 @@ enrich_pathway@result <- dplyr::arrange(enrich_pathway@result, p.adjust)
 deplete_pathway@result <- dplyr::filter(deplete_pathway@result, p.adjust < 0.05)
 deplete_pathway@result <- dplyr::filter(deplete_pathway@result, Description != "Glycolysis / Gluconeogenesis")
 
-p_pathway_enrich <- enrichplot::dotplot(enrich_pathway, showCategory = 10) + 
-  enrichplot::dotplot(deplete_pathway, showCategory = 10) +
+# 中文
+# library(showtext)
+# showtext_auto()
+p_pathway_enrich <- (enrichplot::dotplot(enrich_pathway, showCategory = 10) + 
+    labs(x = "GeneRatio (IBD相关KO/通路中所有KO)", y = "KEGG通路") +
+    theme(axis.title = element_text(family = "SimHei"))) +
+  (enrichplot::dotplot(deplete_pathway, showCategory = 10) +
+    labs(x = "GeneRatio (IBD相关KO/通路中所有KO)", y = "KEGG通路") + 
+    theme(axis.title = element_text(family = "SimHei"))) +
   plot_layout(ncol = 1)
 ```
 
@@ -211,14 +224,13 @@ p_pathway_enrich <- enrichplot::dotplot(enrich_pathway, showCategory = 10) +
 p_pathway_enrich
 ```
 
-<img src="README_files/figure-markdown_github/pathway-enrich-1.png" width=".8\linewidth" />
+<img src="README_files/figure-gfm/pathway-enrich-1.png" width=".8\linewidth" />
 
 ``` r
 # ggsave(p_pathway_enrich, filename = "output/pathway_enrich.pdf", width = 8, height = 9)
 ```
 
-IBD相关KO与网络拓扑属性的关联
------------------------------
+## IBD相关KO与网络拓扑属性的关联
 
 介数中心度表示网络中心性，KO差异值与中心度负相关，IBD相关的KO中心度比其他KO的中心度低。
 
@@ -228,7 +240,7 @@ diff_score <- abs(log2(or))
 cor(diff_score, bc, method = "spearman") # -0.1629
 ```
 
-    ## [1] -0.1629375
+    ## [1] -0.1750646
 
 ``` r
 wilcox.test(diff_score, bc) # 2.2e-16
@@ -238,7 +250,7 @@ wilcox.test(diff_score, bc) # 2.2e-16
     ##  Wilcoxon rank sum test with continuity correction
     ## 
     ## data:  diff_score and bc
-    ## W = 1418468, p-value < 2.2e-16
+    ## W = 1404079, p-value < 2.2e-16
     ## alternative hypothesis: true location shift is not equal to 0
 
 ``` r
@@ -251,11 +263,14 @@ wilcox.test(diff_bc, other_bc, alternative = "less")
     ##  Wilcoxon rank sum test with continuity correction
     ## 
     ## data:  diff_bc and other_bc
-    ## W = 141324, p-value = 1.142e-07
+    ## W = 138736, p-value = 2.301e-08
     ## alternative hypothesis: true location shift is less than 0
 
 ``` r
 topo_tibble <- generate_topos_tibble(diff_ssn)
+topo_other <- dplyr::filter(topo_tibble, state %in% c("Enrich", "Deplete")) %>% 
+  mutate(state = "Associate")
+topo_tibble <- dplyr::bind_rows(topo_tibble, topo_other)
 
 se <- function(x) sd(x)/sqrt(length(x))
 summary_topo_tibble <- group_by(topo_tibble, method, state) %>% 
@@ -265,21 +280,39 @@ summary_topo_tibble <- group_by(topo_tibble, method, state) %>%
     se = se(value)
   )
 
-p_centrality <- ggplot(dplyr::filter(summary_topo_tibble, method == "Betweenness centrality"), 
-  aes(state, m_value, fill = state)) +
+topo_tibble_bc <- dplyr::filter(topo_tibble, method == "Betweenness centrality")
+summary_topo_tibble_bc <- dplyr::filter(summary_topo_tibble, method == "Betweenness centrality")
+
+p_centrality <- ggplot(summary_topo_tibble_bc, aes(state, m_value, fill = state)) +
   geom_col(width = 0.6) +
   geom_errorbar(aes(ymin = m_value - se, ymax = m_value + se), width = 0.2) +
-  labs(x=NULL, y = "Beteenness Centrality") + 
+  labs(x=NULL, y = "介数中心度") + 
   ggsci::scale_fill_npg() +
+  scale_x_discrete(
+    breaks = c("Associate", "Deplete", "Enrich", "Other"),
+    labels = c("相关", "低表达", "高表达", "其它")
+  ) +
   theme_bw() +
-  theme(legend.position = "none")
+  theme(legend.position = "none", 
+    axis.title = element_text(family = "SimHei"),
+    axis.text.x = element_text(family = "SimHei"))
+p_color <- ggplot_build(p_centrality)$data[[1]]$fill
+p_centrality <- p_centrality + 
+  scale_fill_manual(values = c("#3C5488FF", "#00A087FF", "#E64B35FF", "grey")) 
+```
+
+    ## Scale for 'fill' is already present. Adding another scale for 'fill',
+    ## which will replace the existing scale.
+
+``` r
 p_centrality
 ```
 
-![](README_files/figure-markdown_github/p-centrality-1.png)
+![](README_files/figure-gfm/p-centrality-1.png)<!-- -->
 
 ``` r
-#ggsave(p_centrality, "output/p_centrality.pdf", width = 4, height = 3)
+# ggsave(p_centrality, filename = "output/figure/fig3.pdf", width = 4, height = 3)
+# embed_fonts("output/figure/fig3.pdf")
 ```
 
 与介数中心度类似，IBD相关KO的度显著小于其KO的度；相反，IBD相关KO的聚类系数显著高于其他KO的聚类系数
@@ -295,7 +328,7 @@ wilcox.test(diff_cc, other_cc, alternative = "greater") # < 0.0003
     ##  Wilcoxon rank sum test with continuity correction
     ## 
     ## data:  diff_cc and other_cc
-    ## W = 193226, p-value = 0.0004353
+    ## W = 192457, p-value = 0.0003798
     ## alternative hypothesis: true location shift is greater than 0
 
 ``` r
@@ -309,29 +342,50 @@ wilcox.test(diff_dg, other_dg, alternative = "less")
     ##  Wilcoxon rank sum test with continuity correction
     ## 
     ## data:  diff_dg and other_dg
-    ## W = 157296, p-value = 0.005419
+    ## W = 152004, p-value = 0.0005326
     ## alternative hypothesis: true location shift is less than 0
 
 ``` r
-p_other_topo <- ggplot(summary_topo_tibble, aes(state, m_value, fill = state)) + 
+summary_other_topo <- dplyr::filter(summary_topo_tibble, method != "Betweenness centrality")
+summary_other_topo$method <- factor(
+  rep(c("聚类系数", "度", "入度", "出度"), each = 4),
+  levels = c("聚类系数", "度", "入度", "出度")
+)
+p_other_topo <- ggplot(summary_other_topo, aes(state, m_value, fill = state)) + 
   geom_col(width = 0.6) +
   geom_errorbar(aes(ymin = m_value - se, ymax = m_value + se), width = 0.2) +
   facet_wrap(~method, scales = "free_y") +
-  labs(x=NULL, y = "Centrality") + 
+  labs(x=NULL, y = NULL) + 
   ggsci::scale_fill_npg() +
+  scale_x_discrete(
+    breaks = c("Associate", "Deplete", "Enrich", "Other"),
+    labels = c("相关", "低表达", "高表达", "其它")
+  ) +
   theme_bw() +
-  theme(legend.position = "none")
+  theme(legend.position = "none", 
+    axis.title = element_text(family = "SimHei"),
+    axis.text.x = element_text(family = "SimHei"),
+    strip.text = element_text(family = "SimHei")
+  )
+p_other_topo <- p_other_topo +
+  scale_fill_manual(values = c("#3C5488FF", "#00A087FF", "#E64B35FF", "grey"))
+```
+
+    ## Scale for 'fill' is already present. Adding another scale for 'fill',
+    ## which will replace the existing scale.
+
+``` r
 p_other_topo
 ```
 
-![](README_files/figure-markdown_github/p-other-topo-1.png)
+![](README_files/figure-gfm/p-other-topo-1.png)<!-- -->
 
 ``` r
-# ggsave(p_other_topo, "output/p_other_topo.pdf", width = 7, height = 5)
+# ggsave(p_other_topo, filename = "output/figure/fig4.pdf", width = 8, height = 6)
+#embed_fonts("output/figure/fig4.pdf")
 ```
 
-IBD和healthy网络比较
---------------------
+## IBD和healthy网络比较
 
 把所有样本分成IBD和healthy两组，分别构建整合代谢网络，比较其拓扑变化。
 
@@ -366,19 +420,19 @@ shuffled_diff_modularity <- shuffled_modularity$health_modularity - shuffled_mod
 sum(health_modularity > shuffled_modularity$health_modularity) 
 ```
 
-    ## [1] 756
+    ## [1] 748
 
 ``` r
 sum(ibd_modularity < shuffled_modularity$disease_modularity) 
 ```
 
-    ## [1] 948
+    ## [1] 957
 
 ``` r
 sum(diff_modularity > shuffled_diff_modularity)
 ```
 
-    ## [1] 915
+    ## [1] 917
 
 ``` r
 ## density
@@ -392,19 +446,19 @@ shuffled_diff_density <- shuffled_density$health_density - shuffled_density$dise
 sum(health_density > shuffled_density$health_density)
 ```
 
-    ## [1] 888
+    ## [1] 906
 
 ``` r
 sum(ibd_density < shuffled_density$disease_density)
 ```
 
-    ## [1] 740
+    ## [1] 745
 
 ``` r
 sum(diff_density > shuffled_diff_density)
 ```
 
-    ## [1] 873
+    ## [1] 892
 
 用移除网络中的节点模拟外界环境对代谢网络的扰动，分别按三种顺序移除节点：介数中心度、度和随机。通过比较发现，healthy-network比IBD-network更稳定，无论用何种方法移除节点，需要注意的是，随着移除节点数的增多，按介数中心度（约50%）和随机移除节点（约70%），IBD-network比healthy-network更稳健。
 
@@ -424,25 +478,102 @@ nc_tibble <- bind_rows(
   , make_nc_tibble(unlist(nc_health_random), "health", "random"),
    make_nc_tibble(unlist(nc_ibd_random), "IBD", "random")
 )
-p_nc <- ggplot(nc_tibble, aes(x, y, color = state)) +
+nc_tibble_mod <- nc_tibble %>%
+  mutate(method = recode_factor(method,
+    "betweenness" = "介数中心度",
+    "degree" = "度",
+    "random" = "随机"
+))
+p_nc <- ggplot(nc_tibble_mod, aes(x, y, color = state)) +
   geom_line() +
-  theme_bw() + 
-  ggsci::scale_color_npg() +
-  theme(legend.position = c(0.07, 0.9), legend.title = element_blank()) +
-  labs(x = "Percentage of removed nodes", y = "Natural connectivity") +
-  facet_wrap(~method, scales = "free_y")
-
+  labs(x = "移除节点的比例", y = "自然连通度") +
+  facet_wrap(~method, scales = "free_y") +
+  # ggsci::scale_color_npg() +
+  scale_color_manual(values = c("#4DBBD5FF", "#E64B35FF")) +
+  theme_bw() +
+  theme(legend.position = c(0.1, 0.2), 
+    legend.title = element_blank(),
+    strip.text = element_text(family = "SimHei"),
+    axis.title = element_text(family = "SimHei")
+  )
 p_nc
 ```
 
-![](README_files/figure-markdown_github/natural-connectivity-1.png)
+![](README_files/figure-gfm/natural-connectivity-1.png)<!-- -->
 
 ``` r
-# ggsave(p_nc, filename = "output/p_nc.pdf", width = 7, height = 4)
+ggsave(p_nc, filename = "output/figure/fig5.pdf",
+  width = 7, height = 4)
+embed_fonts("output/figure/fig5.pdf")
+
+
+# facet添加tags
+# library(gtable)
+# tag_facet <- function (p, 
+#   open = c("(", ""), close = c(")", "."), 
+#   tag_fun_top = function(i) letters[i], 
+#   tag_fun_right = utils::as.roman, 
+#   x = c(0, 0), y = c(0.5, 1), 
+#   hjust = c(0, 0), vjust = c(0.5, 1), 
+#   fontface = c(2, 2), family = "", file, ...) 
+# {
+#   gb <- ggplot_build(p)
+#   lay <- gb$layout$layout
+#   tags_top <- paste0(open[1], tag_fun_top(unique(lay$COL)), 
+#     close[1])
+#   tags_right <- paste0(open[2], tag_fun_right(unique(lay$ROW)), 
+#     close[2])
+#   tl <- lapply(tags_top, grid::textGrob, x = x[1], y = y[1], 
+#     hjust = hjust[1], vjust = vjust[1], gp = grid::gpar(fontface = fontface[1], 
+#       fontfamily = family, ...))
+#   rl <- lapply(tags_right, grid::textGrob, x = x[2], y = y[2], 
+#     hjust = hjust[2], vjust = vjust[2], gp = grid::gpar(fontface = fontface[2], 
+#       fontfamily = family, ...))
+#   g <- ggplot_gtable(gb)
+#   g <- gtable::gtable_add_rows(g, grid::unit(1, "line"), pos = 0)
+#   l <- unique(g$layout[grepl("panel", g$layout$name), "l"])
+#   g <- gtable::gtable_add_grob(g, grobs = tl, t = 1, l = l)
+#   wm <- do.call(grid::unit.pmax, lapply(rl, grid::grobWidth))
+#   g <- gtable::gtable_add_cols(g, wm, pos = max(l))
+#   t <- unique(g$layout[grepl("panel", g$layout$name), "t"])
+#   g <- gtable::gtable_add_grob(g, grobs = rl, t = t, l = max(l) + 
+#       1)
+#   g <- gtable::gtable_add_cols(g, unit(2, "mm"), pos = max(l))
+#   # save plot
+#   if (file) {
+#     pdf(file = file, family="SimHei", width = 7, height = 4)
+#     grid::grid.newpage()
+#     grid::grid.draw(g)
+#     dev.off()
+#     embed_fonts(file)
+#   }
+#   invisible(g)
+# }
+# 
+# 
+# p_nc <- ggplot(nc_tibble_mod, aes(x, y, color = state)) +
+#   geom_line() +
+#   labs(x = "移除节点的比例", y = "自然连通度") +
+#   facet_wrap(~method, scales = "free_y") +
+#   # ggsci::scale_color_npg() +
+#   scale_color_manual(values = c("#4DBBD5FF", "#E64B35FF")) +
+#   theme_bw() +
+#   theme(legend.position = c(0.1, 0.15), 
+#     legend.title = element_blank(),
+#     strip.text = element_text(family = "SimHei"),
+#     axis.title = element_text(family = "SimHei")
+#   )
+# 
+# tag_facet(
+#   p_nc, open = NULL, close = NULL, 
+#   fontface = 1,
+#   tag_fun_top = function(i)toupper(letters[i]),
+#   tag_fun_right = function(x)return(""),
+#   file = "Project/IBD-metablic-network/fig5.pdf"
+# ) 
 ```
 
-其他
-----
+## 其他
 
 ### modularity的p值
 
@@ -482,7 +613,8 @@ dd_tibble <- tibble(
 
 ### 另外我们可以对拓扑属性（模块度和密度等）做稀疏分析
 
-比如我们发现IBD模块度较小，我们可以不断增大随机抽取样本数，计算这些拓扑属性，看它们是否趋于稳定（收敛），因为我们的例子中样本数较小（127:IBD 73,健康54），增大样本数目的稀疏曲线不够好。可以不断增加随机抽取序列数进行稀疏分析（因为我们直接利用别人的功能注释数据进行分析，就没有进行这一步尝试）。
+比如我们发现IBD模块度较小，我们可以不断增大随机抽取样本数，计算这些拓扑属性，看它们是否趋于稳定（收敛），因为我们的例子中样本数较小（127:IBD
+73,健康54），增大样本数目的稀疏曲线不够好。可以不断增加随机抽取序列数进行稀疏分析（因为我们直接利用别人的功能注释数据进行分析，就没有进行这一步尝试）。
 
 ``` r
 rarefed_net <- raref_sample(kos_norm, state, refnet)
@@ -510,105 +642,106 @@ ggplot(rarefed_tibble, aes(x, modularity, color = state)) + geom_line()
 #   geom_line()
 ```
 
-sessionInfo
------------
+## sessionInfo
 
 ``` r
 sessionInfo()
 ```
 
-    ## R version 3.6.0 (2019-04-26)
-    ## Platform: x86_64-pc-linux-gnu (64-bit)
-    ## Running under: Ubuntu 16.04.6 LTS
+    ## R version 3.6.1 (2019-07-05)
+    ## Platform: x86_64-apple-darwin15.6.0 (64-bit)
+    ## Running under: macOS Mojave 10.14.5
     ## 
     ## Matrix products: default
-    ## BLAS:   /usr/lib/openblas-base/libblas.so.3
-    ## LAPACK: /usr/lib/libopenblasp-r0.2.18.so
+    ## BLAS:   /Library/Frameworks/R.framework/Versions/3.6/Resources/lib/libRblas.0.dylib
+    ## LAPACK: /Library/Frameworks/R.framework/Versions/3.6/Resources/lib/libRlapack.dylib
     ## 
     ## locale:
-    ##  [1] LC_CTYPE=en_US.UTF-8       LC_NUMERIC=C              
-    ##  [3] LC_TIME=en_US.UTF-8        LC_COLLATE=en_US.UTF-8    
-    ##  [5] LC_MONETARY=en_US.UTF-8    LC_MESSAGES=en_US.UTF-8   
-    ##  [7] LC_PAPER=en_US.UTF-8       LC_NAME=C                 
-    ##  [9] LC_ADDRESS=C               LC_TELEPHONE=C            
-    ## [11] LC_MEASUREMENT=en_US.UTF-8 LC_IDENTIFICATION=C       
+    ## [1] zh_CN.UTF-8/zh_CN.UTF-8/zh_CN.UTF-8/C/zh_CN.UTF-8/zh_CN.UTF-8
     ## 
     ## attached base packages:
     ## [1] parallel  stats     graphics  grDevices utils     datasets  methods  
     ## [8] base     
     ## 
     ## other attached packages:
-    ##  [1] patchwork_0.0.1               furrr_0.1.0                  
-    ##  [3] future_1.14.0                 mmnet_1.13.0                 
-    ##  [5] biom_0.4.0                    igraph_1.2.4.1               
-    ##  [7] clusterProfiler_3.12.0        readxl_1.3.1                 
-    ##  [9] forcats_0.4.0                 stringr_1.4.0                
-    ## [11] purrr_0.3.2                   readr_1.3.1                  
-    ## [13] tidyr_0.8.3                   tibble_2.1.3                 
-    ## [15] ggplot2_3.2.1                 tidyverse_1.2.1              
-    ## [17] curatedMetagenomicData_1.14.1 ExperimentHub_1.10.0         
-    ## [19] dplyr_0.8.3                   Biobase_2.44.0               
-    ## [21] AnnotationHub_2.16.0          BiocFileCache_1.8.0          
-    ## [23] dbplyr_1.4.2                  BiocGenerics_0.30.0          
+    ##  [1] extrafont_0.17                patchwork_0.0.1.9000         
+    ##  [3] furrr_0.1.0                   future_1.14.0                
+    ##  [5] mmnet_1.13.0                  biom_0.3.12                  
+    ##  [7] igraph_1.2.4.1                clusterProfiler_3.12.0       
+    ##  [9] readxl_1.3.1                  forcats_0.4.0                
+    ## [11] stringr_1.4.0                 purrr_0.3.2                  
+    ## [13] readr_1.3.1                   tidyr_1.0.0                  
+    ## [15] tibble_2.1.3                  ggplot2_3.2.1                
+    ## [17] tidyverse_1.2.1               curatedMetagenomicData_1.14.1
+    ## [19] ExperimentHub_1.10.0          dplyr_0.8.3                  
+    ## [21] Biobase_2.44.0                AnnotationHub_2.16.0         
+    ## [23] BiocFileCache_1.8.0           dbplyr_1.4.2                 
+    ## [25] BiocGenerics_0.30.0          
     ## 
     ## loaded via a namespace (and not attached):
-    ##   [1] backports_1.1.4               fastmatch_1.1-0              
+    ##   [1] backports_1.1.5               fastmatch_1.1-0              
     ##   [3] plyr_1.8.4                    lazyeval_0.2.2               
-    ##   [5] splines_3.6.0                 BiocParallel_1.18.0          
-    ##   [7] listenv_0.7.0                 urltools_1.7.3               
-    ##   [9] digest_0.6.20                 htmltools_0.3.6              
+    ##   [5] splines_3.6.1                 listenv_0.7.0                
+    ##   [7] BiocParallel_1.18.1           urltools_1.7.3               
+    ##   [9] digest_0.6.22                 htmltools_0.3.6              
     ##  [11] GOSemSim_2.10.0               viridis_0.5.1                
     ##  [13] GO.db_3.8.2                   magrittr_1.5                 
-    ##  [15] memoise_1.1.0                 globals_0.12.4               
-    ##  [17] modelr_0.1.4                  enrichplot_1.4.0             
-    ##  [19] prettyunits_1.0.2             colorspace_1.4-1             
-    ##  [21] blob_1.2.0                    rvest_0.3.4                  
-    ##  [23] rappdirs_0.3.1                ggrepel_0.8.1                
-    ##  [25] haven_2.1.1                   xfun_0.8                     
-    ##  [27] crayon_1.3.4                  RCurl_1.95-4.12              
-    ##  [29] jsonlite_1.6                  zeallot_0.1.0                
-    ##  [31] glue_1.3.1                    polyclip_1.10-0              
-    ##  [33] gtable_0.3.0                  UpSetR_1.4.0                 
-    ##  [35] Rhdf5lib_1.6.0                scales_1.0.0                 
-    ##  [37] DOSE_3.10.2                   DBI_1.0.0                    
-    ##  [39] Rcpp_1.0.2                    viridisLite_0.3.0            
-    ##  [41] xtable_1.8-4                  progress_1.2.2               
-    ##  [43] gridGraphics_0.4-1            bit_1.1-14                   
-    ##  [45] europepmc_0.3                 stats4_3.6.0                 
-    ##  [47] httr_1.4.0                    fgsea_1.10.0                 
-    ##  [49] RColorBrewer_1.1-2            modeltools_0.2-22            
-    ##  [51] pkgconfig_2.0.2               XML_3.98-1.20                
-    ##  [53] flexmix_2.3-15                farver_1.1.0                 
-    ##  [55] nnet_7.3-12                   RJSONIO_1.3-1.2              
-    ##  [57] ggplotify_0.0.4               tidyselect_0.2.5             
-    ##  [59] labeling_0.3                  rlang_0.4.0                  
-    ##  [61] reshape2_1.4.3                later_0.8.0                  
-    ##  [63] AnnotationDbi_1.46.0          munsell_0.5.0                
-    ##  [65] cellranger_1.1.0              tools_3.6.0                  
-    ##  [67] cli_1.1.0                     generics_0.0.2               
-    ##  [69] RSQLite_2.1.2                 broom_0.5.2                  
-    ##  [71] ggridges_0.5.1                evaluate_0.14                
-    ##  [73] yaml_2.2.0                    knitr_1.23                   
-    ##  [75] bit64_0.9-7                   ggraph_1.0.2                 
-    ##  [77] nlme_3.1-139                  mime_0.7                     
-    ##  [79] DO.db_2.9                     xml2_1.2.0                   
-    ##  [81] compiler_3.6.0                rstudioapi_0.10              
-    ##  [83] curl_4.0                      interactiveDisplayBase_1.22.0
-    ##  [85] tweenr_1.0.1                  stringi_1.4.3                
-    ##  [87] lattice_0.20-38               Matrix_1.2-17                
-    ##  [89] ggsci_2.9                     vctrs_0.2.0                  
-    ##  [91] pillar_1.4.2                  BiocManager_1.30.4           
-    ##  [93] triebeard_0.3.0               data.table_1.12.2            
-    ##  [95] cowplot_1.0.0                 bitops_1.0-6                 
-    ##  [97] httpuv_1.5.1                  qvalue_2.16.0                
-    ##  [99] R6_2.4.0                      promises_1.0.1               
-    ## [101] gridExtra_2.3                 IRanges_2.18.1               
-    ## [103] codetools_0.2-16              MASS_7.3-51.1                
-    ## [105] assertthat_0.2.1              rhdf5_2.28.0                 
-    ## [107] withr_2.1.2                   S4Vectors_0.22.0             
-    ## [109] hms_0.5.0                     grid_3.6.0                   
-    ## [111] rmarkdown_1.14                rvcheck_0.1.3                
-    ## [113] ggforce_0.2.2                 shiny_1.3.2                  
-    ## [115] lubridate_1.7.4
+    ##  [15] memoise_1.1.0.9000            globals_0.12.4               
+    ##  [17] Biostrings_2.52.0             graphlayouts_0.5.0           
+    ##  [19] modelr_0.1.5                  extrafontdb_1.0              
+    ##  [21] enrichplot_1.4.0              prettyunits_1.0.2            
+    ##  [23] colorspace_1.4-1              blob_1.2.0                   
+    ##  [25] rvest_0.3.4                   rappdirs_0.3.1               
+    ##  [27] ggrepel_0.8.1                 haven_2.1.1                  
+    ##  [29] xfun_0.9                      crayon_1.3.4                 
+    ##  [31] RCurl_1.95-4.12               jsonlite_1.6                 
+    ##  [33] zeallot_0.1.0                 glue_1.3.1                   
+    ##  [35] polyclip_1.10-0               gtable_0.3.0                 
+    ##  [37] zlibbioc_1.30.0               XVector_0.24.0               
+    ##  [39] UpSetR_1.4.0                  Rttf2pt1_1.3.7               
+    ##  [41] scales_1.0.0                  DOSE_3.10.2                  
+    ##  [43] DBI_1.0.0                     Rcpp_1.0.3                   
+    ##  [45] viridisLite_0.3.0             xtable_1.8-4                 
+    ##  [47] progress_1.2.2                gridGraphics_0.4-1           
+    ##  [49] bit_1.1-14                    europepmc_0.3                
+    ##  [51] stats4_3.6.1                  httr_1.4.1                   
+    ##  [53] fgsea_1.10.1                  RColorBrewer_1.1-2           
+    ##  [55] modeltools_0.2-22             pkgconfig_2.0.3              
+    ##  [57] XML_3.98-1.20                 flexmix_2.3-15               
+    ##  [59] farver_1.1.0                  nnet_7.3-12                  
+    ##  [61] RJSONIO_1.3-1.2               labeling_0.3                 
+    ##  [63] ggplotify_0.0.4               tidyselect_0.2.5             
+    ##  [65] rlang_0.4.1                   reshape2_1.4.3               
+    ##  [67] later_0.8.0                   AnnotationDbi_1.46.1         
+    ##  [69] munsell_0.5.0                 cellranger_1.1.0             
+    ##  [71] tools_3.6.1                   cli_1.1.0                    
+    ##  [73] generics_0.0.2                RSQLite_2.1.2                
+    ##  [75] broom_0.5.2                   ggridges_0.5.1               
+    ##  [77] evaluate_0.14                 yaml_2.2.0                   
+    ##  [79] knitr_1.24                    bit64_0.9-7                  
+    ##  [81] tidygraph_1.1.2               KEGGREST_1.24.0              
+    ##  [83] ggraph_2.0.0                  nlme_3.1-140                 
+    ##  [85] mime_0.7                      DO.db_2.9                    
+    ##  [87] xml2_1.2.2                    compiler_3.6.1               
+    ##  [89] rstudioapi_0.10               curl_4.2                     
+    ##  [91] png_0.1-7                     interactiveDisplayBase_1.22.0
+    ##  [93] tweenr_1.0.1                  stringi_1.4.3                
+    ##  [95] lattice_0.20-38               Matrix_1.2-17                
+    ##  [97] ggsci_2.9                     vctrs_0.2.0                  
+    ##  [99] pillar_1.4.2                  lifecycle_0.1.0              
+    ## [101] BiocManager_1.30.4            triebeard_0.3.0              
+    ## [103] data.table_1.12.2             cowplot_1.0.0                
+    ## [105] bitops_1.0-6                  httpuv_1.5.2                 
+    ## [107] qvalue_2.16.0                 R6_2.4.1                     
+    ## [109] promises_1.0.1                gridExtra_2.3                
+    ## [111] IRanges_2.18.2                codetools_0.2-16             
+    ## [113] MASS_7.3-51.4                 assertthat_0.2.1             
+    ## [115] withr_2.1.2                   S4Vectors_0.22.0             
+    ## [117] hms_0.5.1                     grid_3.6.1                   
+    ## [119] rmarkdown_1.15                rvcheck_0.1.3                
+    ## [121] ggforce_0.3.1                 shiny_1.3.2                  
+    ## [123] lubridate_1.7.4
 
-[1] H B, Almeida M, Juncker A S, et al. Identification and assembly of genomes and genetic elements in complex metagenomic samples without using reference genomes. Nature Biotechnology, 2014, 32(8): 822–828.
+1.  H B, Almeida M, Juncker A S, et al. Identification and assembly of
+    genomes and genetic elements in complex metagenomic samples without
+    using reference genomes. Nature Biotechnology, 2014, 32(8): 822–828.
